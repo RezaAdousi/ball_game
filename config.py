@@ -13,8 +13,8 @@ SCREEN_HEIGHT = 920
 # ============================================================
 
 # CAMERA_URL = "http://172.30.2.62:8080/video"
-CAMERA_URL = "http://172.30.1.216:4747/video"
-# CAMERA_URL = "http://192.168.108.154:4698/video"
+# CAMERA_URL = "http://172.30.1.216:4747/video"
+CAMERA_URL = "http://192.168.1.194:4747/video"
 
 # How long to wait between attempts to (re)connect to the camera
 # when it is unreachable - both on startup (phone app not open yet)
@@ -388,7 +388,27 @@ PHYSICS_MAX_STEP_SECONDS = 1.0 / 240.0
 # A new ball drops in every BALL_SPAWN_INTERVAL_SECONDS, on its own
 # clock, completely independent of what earlier balls are doing or
 # whether they've disappeared yet.
-BALL_SPAWN_INTERVAL_SECONDS = 3.0
+BALL_SPAWN_INTERVAL_SECONDS = 2.5
+
+# ============================================================
+# Launcher configuration
+# ============================================================
+#
+# Attached to top-center of the screen.
+# Angles are in degrees relative to straight down (0 = straight down,
+# negative = left, positive = right).
+LAUNCHER_MIN_ANGLE = -70.0
+LAUNCHER_MAX_ANGLE = 70.0
+
+# Dimensions of the launcher tube in screen pixels.
+LAUNCHER_LENGTH = 75.0
+LAUNCHER_WIDTH = 26.0
+
+# Angular rotation speed (controls continuous smooth movement).
+LAUNCHER_ROTATION_SPEED = 35.0
+
+# Initial ball speed when exiting the nozzle (px/s).
+LAUNCHER_BALL_SPAWN_SPEED = 280.0
 
 # Every ball is removed (with a little pop effect, see effects.py)
 # this many seconds after it was spawned, whatever else is

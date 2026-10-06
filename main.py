@@ -151,6 +151,7 @@ class Game:
             self.physics.balls,
             obstacles,
             self.effects,
+            self.physics.launcher,
         )
 
     # ========================================================

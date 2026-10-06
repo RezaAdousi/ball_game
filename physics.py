@@ -40,6 +40,7 @@ import math
 import random
 
 from geometry import extract_obb
+from launcher import Launcher
 
 from config import (
     BALL_RADIUS,
@@ -53,9 +54,6 @@ from config import (
     BALL_BALL_RESTITUTION,
     PHYSICS_MAX_STEP_SECONDS,
     MAX_SIMULTANEOUS_BALLS,
-    BALL_SPAWN_RANDOM_X,
-    BALL_SPAWN_MARGIN,
-    BALL_SPAWN_VELOCITY_JITTER,
     BALL_STUCK_DISTANCE,
     BALL_STUCK_TIMEOUT_SECONDS,
     BALL_MAX_LIFETIME_SECONDS,
@@ -172,14 +170,17 @@ class PhysicsWorld:
         self.width = float(width)
         self.height = float(height)
 
+        self.launcher = Launcher(width, height)
+
         self.balls = []
 
-        # Impact/pop events produced by the last update(), consumed
+        # Impact/pop/launch events produced by the last update(), consumed
         # by effects.py: (kind, x, y, normal_x, normal_y, speed,
-        # ball). kind is "obstacle", "ball" or "pop".
+        # ball). kind is "obstacle", "ball", "pop" or "launch".
         self.events = []
 
         self._solids = []
+        self._sticker_solids = []
         self._solid_source = None
 
         self._random = random.Random()
@@ -222,12 +223,13 @@ class PhysicsWorld:
 
     def spawn_ball(self):
         """
-        Drops one new ball in from just above the top of the screen.
-        Returns the ball, or None if it wasn't possible (a pile-up
-        right at the drop point, or too many balls already).
+        Spawns a new ball emerging from the launcher nozzle.
+        Returns the ball, or None if blocked at nozzle exit or max balls reached.
         """
         if self.live_ball_count() >= MAX_SIMULTANEOUS_BALLS:
             return None
+
+        spawn_x, spawn_y, dir_x, dir_y = self.launcher.get_spawn_transform()
 
         rng = self._random
 
@@ -239,53 +241,45 @@ class PhysicsWorld:
             )
         )
 
-        for _ in range(8):
-            if BALL_SPAWN_RANDOM_X:
-                x = rng.uniform(
-                    BALL_SPAWN_MARGIN,
-                    self.width - BALL_SPAWN_MARGIN,
+        min_distance = (radius + BALL_RADIUS * (1.0 + BALL_RADIUS_VARIATION)) * 1.05
+
+        for other in self.balls:
+            if not other.alive or other.dying:
+                continue
+
+            if math.hypot(spawn_x - other.x, spawn_y - other.y) < min_distance:
+                return None
+
+        vel_x = dir_x * self.launcher.spawn_speed
+        vel_y = dir_y * self.launcher.spawn_speed
+
+        ball = Ball(
+            x=spawn_x,
+            y=spawn_y,
+            radius=radius,
+            velocity_x=vel_x,
+            velocity_y=vel_y,
+            gravity=BALL_GRAVITY,
+            hue=self._next_hue(),
+        )
+        ball.entered = True
+
+        self.balls.append(ball)
+
+        if len(self.events) < _MAX_EVENTS_PER_FRAME:
+            self.events.append(
+                (
+                    "launch",
+                    spawn_x,
+                    spawn_y,
+                    dir_x,
+                    dir_y,
+                    self.launcher.spawn_speed,
+                    ball,
                 )
-            else:
-                x = self.width / 2.0
+            )
 
-            y = -radius * 1.5
-
-            blocked = False
-
-            for other in self.balls:
-                if not other.alive or other.dying:
-                    continue
-
-                min_distance = (
-                    (radius + other.radius) * 1.05
-                )
-
-                if (
-                    math.hypot(x - other.x, y - other.y)
-                    < min_distance
-                ):
-                    blocked = True
-                    break
-
-            if not blocked:
-                ball = Ball(
-                    x=x,
-                    y=y,
-                    radius=radius,
-                    velocity_x=rng.uniform(
-                        -BALL_SPAWN_VELOCITY_JITTER,
-                        BALL_SPAWN_VELOCITY_JITTER,
-                    ),
-                    velocity_y=0.0,
-                    gravity=BALL_GRAVITY,
-                    hue=self._next_hue(),
-                )
-
-                self.balls.append(ball)
-
-                return ball
-
-        return None
+        return ball
 
     # ========================================================
     # Obstacles
@@ -293,23 +287,26 @@ class PhysicsWorld:
 
     def set_obstacles(self, obstacles):
         # The vision thread publishes a NEW list object whenever
-        # something changed; rebuild only then.
-        if obstacles is self._solid_source:
-            return
+        # something changed; rebuild sticker solids only then.
+        if obstacles is not self._solid_source:
+            self._solid_source = obstacles
 
-        self._solid_source = obstacles
+            solids = []
 
-        solids = []
+            for obstacle in obstacles or ():
+                obb = extract_obb(obstacle)
 
-        for obstacle in obstacles or ():
-            obb = extract_obb(obstacle)
+                if obb is None:
+                    continue
 
-            if obb is None:
-                continue
+                solids.append(_Solid(*obb))
 
-            solids.append(_Solid(*obb))
+            self._sticker_solids = solids
 
-        self._solids = solids
+        # Combine sticker solids + launcher tube solid
+        self._solids = list(self._sticker_solids)
+        if self.launcher is not None:
+            self._solids.append(_Solid(*self.launcher.get_solid_params()))
 
     # ========================================================
     # Update
@@ -322,6 +319,9 @@ class PhysicsWorld:
             return
 
         delta_time = min(delta_time, 0.05)
+
+        if self.launcher is not None:
+            self.launcher.update(delta_time)
 
         self.set_obstacles(obstacles)
 

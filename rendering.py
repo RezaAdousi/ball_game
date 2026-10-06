@@ -181,12 +181,12 @@ class Renderer:
     # Main rendering
     # ========================================================
 
-    def render(self, balls, obstacles, effects=None):
+    def render(self, balls, obstacles, effects=None, launcher=None):
         now = time.monotonic()
 
         self._sync_obstacles(obstacles)
 
-        items = self._collect_items(balls, effects)
+        items = self._collect_items(balls, effects, launcher)
 
         cell_items = {}
 
@@ -428,8 +428,11 @@ class Renderer:
     # (layer, bounding_rect, draw_tuple) ONCE per frame; the
     # per-cell painting then only replays those tuples.
 
-    def _collect_items(self, balls, effects):
+    def _collect_items(self, balls, effects, launcher=None):
         items = []
+
+        if launcher is not None:
+            self._collect_launcher(items, launcher)
 
         effects_on = (
             VISUAL_EFFECTS_ENABLED and effects is not None
@@ -447,6 +450,21 @@ class Renderer:
                 self._collect_ball(items, ball, effects_on)
 
         return items
+
+    def _collect_launcher(self, items, launcher):
+        points = launcher.get_points()
+
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+
+        bounds = pygame.Rect(
+            int(min(xs)) - 3,
+            int(min(ys)) - 3,
+            int(max(xs) - min(xs)) + 6,
+            int(max(ys) - min(ys)) + 6,
+        )
+
+        items.append((_LAYER_BODY, bounds, ("launcher", launcher)))
 
     # ---- particles / rings -------------------------------------
 
@@ -788,6 +806,78 @@ class Renderer:
                 highlight_position,
                 highlight_radius,
             )
+
+        elif kind == "launcher":
+            launcher = draw[1]
+            points = launcher.get_points()
+
+            # Solid metallic tube fill
+            pygame.draw.polygon(screen, (48, 55, 66), points)
+
+            # Highlight & Shadow lines along the tube
+            rad = math.radians(launcher.angle)
+            u_x = math.sin(rad)
+            u_y = math.cos(rad)
+            v_x = -u_y
+            v_y = u_x
+
+            half_w = launcher.tube_width / 2.0
+            length = launcher.length
+
+            # Highlight line along left inner edge
+            hl_start = (
+                launcher.pivot_x - v_x * (half_w * 0.4),
+                launcher.pivot_y - v_y * (half_w * 0.4),
+            )
+            hl_end = (
+                launcher.pivot_x + u_x * length - v_x * (half_w * 0.4),
+                launcher.pivot_y + u_y * length - v_y * (half_w * 0.4),
+            )
+            pygame.draw.line(
+                screen,
+                (115, 126, 142),
+                hl_start,
+                hl_end,
+                width=max(2, int(half_w * 0.45)),
+            )
+
+            # Shadow line along right inner edge
+            sh_start = (
+                launcher.pivot_x + v_x * (half_w * 0.5),
+                launcher.pivot_y + v_y * (half_w * 0.5),
+            )
+            sh_end = (
+                launcher.pivot_x + u_x * length + v_x * (half_w * 0.5),
+                launcher.pivot_y + u_y * length + v_y * (half_w * 0.5),
+            )
+            pygame.draw.line(
+                screen,
+                (26, 30, 38),
+                sh_start,
+                sh_end,
+                width=max(2, int(half_w * 0.35)),
+            )
+
+            # Dark nozzle rim at tip
+            p_bot_right = points[2]
+            p_bot_left = points[3]
+            rim_points = [
+                (
+                    launcher.pivot_x + u_x * (length - 6.0) - v_x * half_w,
+                    launcher.pivot_y + u_y * (length - 6.0) - v_y * half_w,
+                ),
+                (
+                    launcher.pivot_x + u_x * (length - 6.0) + v_x * half_w,
+                    launcher.pivot_y + u_y * (length - 6.0) + v_y * half_w,
+                ),
+                p_bot_right,
+                p_bot_left,
+            ]
+            pygame.draw.polygon(screen, (32, 36, 44), rim_points)
+
+            # Crisp metallic outline
+            pygame.draw.polygon(screen, (78, 88, 102), points, width=2)
+            pygame.draw.aalines(screen, (95, 108, 124), True, points)
 
     # ========================================================
     # Colours and glow sprites

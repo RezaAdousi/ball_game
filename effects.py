@@ -127,6 +127,11 @@ class Effects:
             self._ring(x, y, ball.hue, ball.radius * 3.0, 0.45)
             return
 
+        if kind == "launch":
+            self._sparks(x, y, nx, ny, ball.hue, 12, 0.8)
+            self._ring(x, y, ball.hue, ball.radius * 2.2, 0.25)
+            return
+
         strength = min(1.0, speed / _FULL_STRENGTH_SPEED)
 
         ball.squash = 1.0
